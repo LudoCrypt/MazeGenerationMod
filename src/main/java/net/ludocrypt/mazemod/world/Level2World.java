@@ -8,6 +8,7 @@ import com.google.common.collect.Maps;
 
 import net.ludocrypt.exdimapi.api.ExtraDimension;
 import net.ludocrypt.exdimapi.mixin.DimensionTypeAccessor;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.render.SkyProperties;
 import net.minecraft.tag.BlockTags;
 import net.minecraft.util.Identifier;
@@ -20,24 +21,25 @@ import net.minecraft.world.biome.source.VoronoiBiomeAccessType;
 import net.minecraft.world.gen.chunk.ChunkGenerator;
 import net.minecraft.world.gen.chunk.ChunkGeneratorSettings;
 
-public class MazeWorld extends ExtraDimension {
+public class Level2World extends ExtraDimension {
 
+	public static final Identifier LEVEL_2_ID = new Identifier("mazemod", "level_2");
 	public static final Map<RegistryKey<Biome>, Biome.MixedNoisePoint> NOISE_POINTS = Maps.newHashMap();
 	public static final NoiseParameters DEFAULT = new NoiseParameters(7, ImmutableList.of(1.0D));
 
-	public MazeWorld() {
-		super(new Identifier("mazemod", "mazeworld"), DimensionTypeAccessor.createDimensionType(OptionalLong.empty(), true, false, false, false, 1, false, false, false, false, false, 256, VoronoiBiomeAccessType.INSTANCE, BlockTags.INFINIBURN_OVERWORLD.getId(), new Identifier("overworld"), 1.0F), new SkyProperties.Overworld(), (dim, client, ci) -> {
+	public Level2World() {
+		super(LEVEL_2_ID, DimensionTypeAccessor.createDimensionType(OptionalLong.empty(), true, false, false, false, 1, false, false, false, false, false, 256, VoronoiBiomeAccessType.INSTANCE, BlockTags.INFINIBURN_OVERWORLD.getId(), new Identifier("overworld"), 1.0F), new SkyProperties.Overworld(), (dim, client, ci) -> {
 		}, DEFAULT, DEFAULT, DEFAULT, DEFAULT, null, NOISE_POINTS);
 	}
 
 	@Override
 	public ChunkGenerator createGenerator(Registry<Biome> biomeRegistry, Registry<ChunkGeneratorSettings> chunkGeneratorSettingsRegistry, long seed) {
-		return new MazeChunkGenerator(4, 4, 1, BIOME_SOURCE_PRESET.getBiomeSource(biomeRegistry, seed), seed);
+		return new MazeChunkGenerator(3, 4, 100, Blocks.STONE.getDefaultState(), Blocks.GRAY_CONCRETE.getDefaultState(), ImmutableList.of(true, true, false, true, true), ImmutableList.of(true, false, true, false, true), ImmutableList.of(false, true, true, false, false), ImmutableList.of(true, true, true, true, true), BIOME_SOURCE_PRESET.getBiomeSource(biomeRegistry, seed), seed);
 	}
 
 	@Override
 	public void init() {
-		Registry.register(Registry.CHUNK_GENERATOR, new Identifier("mazemod", "mazeworld"), MazeChunkGenerator.CODEC);
+
 	}
 
 	static {

@@ -1,11 +1,12 @@
 package net.ludocrypt.mazemod.world;
 
 import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Random;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
-import com.google.common.collect.UnmodifiableIterator;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
@@ -30,14 +31,20 @@ public class MazeChunkGenerator extends ChunkGenerator {
 
 	private BiomeSource biomeSource;
 	private long seed;
-	private BlockState[] states = new BlockState[] { Blocks.YELLOW_CONCRETE.getDefaultState(), Blocks.STONE.getDefaultState(), Blocks.AIR.getDefaultState() };
 	private int height;
 	private int width;
 	private int seaLevel;
+	private BlockState walls;
+	private BlockState base;
+	private BlockState[] states;
 	private ImmutableList<Pair<Boolean, OctavePerlinNoiseSampler>> noisemapOne = ImmutableList.of();
 	private ImmutableList<Pair<Boolean, OctavePerlinNoiseSampler>> noisemapTwo = ImmutableList.of();
 	private ImmutableList<Pair<Boolean, OctavePerlinNoiseSampler>> noisemapThree = ImmutableList.of();
 	private ImmutableList<Pair<Boolean, OctavePerlinNoiseSampler>> noisemapFour = ImmutableList.of();
+	private List<Boolean> northNoisemap;
+	private List<Boolean> eastNoisemap;
+	private List<Boolean> southNoisemap;
+	private List<Boolean> westNoisemap;
 
 	public static final Codec<MazeChunkGenerator> CODEC = RecordCodecBuilder.create((instance) -> {
 		return instance.group(Codec.INT.fieldOf("height").forGetter((chunkGenerator) -> {
@@ -46,6 +53,18 @@ public class MazeChunkGenerator extends ChunkGenerator {
 			return chunkGenerator.width;
 		}), Codec.INT.fieldOf("sea_level").forGetter((chunkGenerator) -> {
 			return chunkGenerator.seaLevel;
+		}), BlockState.CODEC.fieldOf("wall_block").forGetter((chunkGenerator) -> {
+			return chunkGenerator.walls;
+		}), BlockState.CODEC.fieldOf("base_block").forGetter((chunkGenerator) -> {
+			return chunkGenerator.base;
+		}), Codec.list(Codec.BOOL).fieldOf("north_noisemap").forGetter((chunkGenerator) -> {
+			return chunkGenerator.northNoisemap;
+		}), Codec.list(Codec.BOOL).fieldOf("east_noisemap").forGetter((chunkGenerator) -> {
+			return chunkGenerator.eastNoisemap;
+		}), Codec.list(Codec.BOOL).fieldOf("south_noisemap").forGetter((chunkGenerator) -> {
+			return chunkGenerator.southNoisemap;
+		}), Codec.list(Codec.BOOL).fieldOf("west_noisemap").forGetter((chunkGenerator) -> {
+			return chunkGenerator.westNoisemap;
 		}), BiomeSource.CODEC.fieldOf("biome_source").forGetter((chunkGenerator) -> {
 			return chunkGenerator.biomeSource;
 		}), Codec.LONG.fieldOf("seed").forGetter((chunkGenerator) -> {
@@ -53,14 +72,24 @@ public class MazeChunkGenerator extends ChunkGenerator {
 		})).apply(instance, instance.stable(MazeChunkGenerator::new));
 	});
 
-	public MazeChunkGenerator(int height, int width, int seaLevel, BiomeSource biomeSource, long seed) {
+	public MazeChunkGenerator(int height, int width, int seaLevel, BlockState walls, BlockState base, List<Boolean> northNoisemap, List<Boolean> eastNoisemap, List<Boolean> southNoisemap, List<Boolean> westNoisemap, BiomeSource biomeSource, long seed) {
 		super(biomeSource, biomeSource, new StructuresConfig(false), seed);
+		this.height = height;
+		this.width = width;
+		this.walls = walls;
+		this.base = base;
+		this.states = new BlockState[] { base, walls, Blocks.AIR.getDefaultState() };
+		this.northNoisemap = northNoisemap;
+		this.eastNoisemap = eastNoisemap;
+		this.southNoisemap = southNoisemap;
+		this.westNoisemap = westNoisemap;
+		this.seaLevel = seaLevel;
 		this.biomeSource = biomeSource;
 		this.seed = seed;
-		this.noisemapOne = createNoise(ImmutableList.of(true, true, false, true, true), seed);
-		this.noisemapTwo = createNoise(ImmutableList.of(true, false, true, false, true), seed);
-		this.noisemapThree = createNoise(ImmutableList.of(false, true, true, false, false), seed);
-		this.noisemapFour = createNoise(ImmutableList.of(true, true, true, true, true), seed);
+		this.noisemapOne = createNoise(northNoisemap, seed);
+		this.noisemapTwo = createNoise(eastNoisemap, seed);
+		this.noisemapThree = createNoise(southNoisemap, seed);
+		this.noisemapFour = createNoise(westNoisemap, seed);
 	}
 
 	@Override
@@ -70,7 +99,7 @@ public class MazeChunkGenerator extends ChunkGenerator {
 
 	@Override
 	public ChunkGenerator withSeed(long seed) {
-		return new MazeChunkGenerator(this.height, this.width, this.seaLevel, this.biomeSource, seed);
+		return new MazeChunkGenerator(this.height, this.width, this.seaLevel, this.walls, this.base, this.northNoisemap, this.eastNoisemap, this.southNoisemap, this.westNoisemap, this.biomeSource, seed);
 	}
 
 	@Override
@@ -102,7 +131,7 @@ public class MazeChunkGenerator extends ChunkGenerator {
 							return ((Pair<Boolean, OctavePerlinNoiseSampler>) entry).getRight().sample(pos.getX() / 5, 0, pos.getZ() / 5);
 						})).get().getLeft();
 
-						int size = 8;
+						int size = width;
 						if (pos.getX() % size == 0 && pos.getZ() % size == 0) {
 							buildRoom(world, pos, size, random.nextBoolean() && random.nextBoolean() && random.nextBoolean() ? north : !north, random.nextBoolean() && random.nextBoolean() && random.nextBoolean() ? east : !east, random.nextBoolean() && random.nextBoolean() && random.nextBoolean() ? south : !south, random.nextBoolean() && random.nextBoolean() && random.nextBoolean() ? west : !west, states[1]);
 							// Cleanup
@@ -166,10 +195,10 @@ public class MazeChunkGenerator extends ChunkGenerator {
 		return this.seaLevel;
 	}
 
-	private static ImmutableList<Pair<Boolean, OctavePerlinNoiseSampler>> createNoise(ImmutableList<Boolean> aspects, long seed) {
+	private static ImmutableList<Pair<Boolean, OctavePerlinNoiseSampler>> createNoise(List<Boolean> aspects, long seed) {
 		Builder<Pair<Boolean, OctavePerlinNoiseSampler>> builder = new Builder<Pair<Boolean, OctavePerlinNoiseSampler>>();
 
-		for (UnmodifiableIterator<Boolean> var4 = aspects.iterator(); var4.hasNext(); ++seed) {
+		for (Iterator<Boolean> var4 = aspects.iterator(); var4.hasNext(); ++seed) {
 			Boolean layer = var4.next();
 			builder.add(new Pair<Boolean, OctavePerlinNoiseSampler>(layer, new OctavePerlinNoiseSampler(new ChunkRandom(seed), ImmutableList.of(-4))));
 		}
